@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <defs>
+    <style>
+      .box-fill { fill: #000000; }
+      .stroke-white { fill: none; stroke: #ffffff; stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; }
+      .logo-text { fill: #ffffff; font-size: 124px; font-weight: 700; 
+        font-family: 'Inter','Poppins','SF Pro Display','Helvetica Neue','Arial',sans-serif; letter-spacing: 0.5px;}
+    </style>
+  </defs>
+
+  <!-- Transparent background -->
+  <rect x="0" y="0" width="512" height="512" fill="none"/>
+
+  <!-- Gift box base -->
+  <rect x="74" y="164" width="364" height="268" rx="22" class="box-fill"/>
+  <rect x="74" y="164" width="364" height="268" rx="22" class="stroke-white"/>
+
+  <!-- Box lid lip (slightly inset) -->
+  <path d="M88 196 H424" class="stroke-white"/>
+
+  <!-- Bow: left loop -->
+  <path d="M182 160
+           C128 110, 138 72, 182 72
+           C210 72, 230 96, 240 120" class="stroke-white"/>
+  <!-- Bow: right loop -->
+  <path d="M330 160
+           C384 110, 374 72, 330 72
+           C302 72, 282 96, 272 120" class="stroke-white"/>
+  <!-- Bow center knot -->
+  <circle cx="256" cy="140" r="6" fill="#ffffff"/>
+
+  <!-- Text -->
+  <text x="103" y="332" class="logo-text">sndr</text>
+</svg>

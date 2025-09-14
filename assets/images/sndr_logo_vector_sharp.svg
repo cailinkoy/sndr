@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <!-- Transparent background -->
+
+  <!-- BOX OUTLINE (sharp corners, no fill) -->
+  <!-- We draw a path instead of <rect> so we can guarantee square joins -->
+  <path d="M74 164 H438 V432 H74 Z"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="18"
+        stroke-linecap="butt"
+        stroke-linejoin="miter"
+        stroke-miterlimit="4"/>
+
+  <!-- LID LINE (sharp ends) -->
+  <path d="M88 196 H424"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="18"
+        stroke-linecap="butt"
+        stroke-linejoin="miter"/>
+
+  <!-- BOW (rounded ends to keep it friendly) -->
+  <path d="M182 160 C128 110, 138 72, 182 72 C210 72, 230 96, 240 120"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="18"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <path d="M330 160 C384 110, 374 72, 330 72 C302 72, 282 96, 272 120"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="18"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <circle cx="256" cy="140" r="6" fill="#ffffff"/>
+
+  <!-- WORDMARK -->
+  <text x="103" y="332"
+        fill="#ffffff"
+        font-size="124px"
+        font-weight="700"
+        font-family="Inter, Poppins, SF Pro Display, Helvetica Neue, Arial, sans-serif"
+        letter-spacing="0.5px">sndr</text>
+</svg>
