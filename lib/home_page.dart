@@ -10,6 +10,7 @@ import 'models/event_info.dart';
 import 'tabs/events_tab.dart';
 import 'tabs/contacts_tab.dart';
 import 'pages/settings_page.dart';
+import 'pages/about_page.dart';
 import 'package:sndr_app_new/widgets/sndr_logo.dart';
 import 'widgets/sndr_drawer_header_logo.dart';
 
@@ -492,7 +493,6 @@ class _MainDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -538,27 +538,12 @@ class _MainDrawer extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.feedback_outlined),
-              title: const Text('Send Feedback'),
+              title: const Text('About/Contact'),
               onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Coming soon: in-app feedback'),
-                    backgroundColor: cs.primary,
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AboutPage(sections: aboutSections),
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('About'),
-              onTap: () {
-                Navigator.pop(context);
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'SNDR',
-                  applicationVersion: '0.1.0',
-                  applicationIcon: const Icon(Icons.card_giftcard_rounded),
                 );
               },
             ),

@@ -12,7 +12,11 @@ class GiftIdea {
   final String urlHint; // keywords to search (e.g., "artisan coffee sampler")
   final int wowFactor;
 
+  /// NEW: non-Amazon direct link from backend (prefer this for non-Amazon).
+  final String? url;
+
   /// Optional: where you store a resolved/affiliate URL you compute client- or server-side.
+  /// Typically Amazon links with your affiliate tag.
   final String? affiliateUrl;
 
   /// Optional: allow backend to send an ASIN; we’ll build a canonical /dp/ URL if present.
@@ -31,6 +35,7 @@ class GiftIdea {
     this.categories = const [],
     this.urlHint = "",
     this.wowFactor = 3,
+    this.url, // <-- NEW
     this.affiliateUrl,
     this.asin,
     this.imageUrl,
@@ -60,7 +65,14 @@ class GiftIdea {
         ? (j['wowFactor'] as num).toInt()
         : 3;
 
-    // Prefer an explicit product URL if the backend provides one.
+    // NEW: accept non-Amazon direct link without clobbering it.
+    final urlRaw = j['url'];
+    final url = (urlRaw is String && urlRaw.trim().isNotEmpty)
+        ? urlRaw.trim()
+        : null;
+
+    // Prefer an explicit affiliate/product URL if the backend provides one.
+    // Do NOT overwrite `url` with this; keep both fields distinct.
     final explicitUrl =
         (j['affiliateUrl'] ?? j['productUrl'] ?? j['amazonUrl']);
     final affiliateUrl =
@@ -86,6 +98,7 @@ class GiftIdea {
       categories: categories,
       urlHint: urlHint,
       wowFactor: wowFactor,
+      url: url, // <-- NEW
       affiliateUrl: affiliateUrl,
       asin: asin,
       imageUrl: imageUrl,
@@ -94,6 +107,7 @@ class GiftIdea {
   }
 
   GiftIdea copyWith({
+    String? url, // <-- NEW
     String? affiliateUrl,
     String? imageUrl,
     String? imageAlt,
@@ -104,6 +118,7 @@ class GiftIdea {
     categories: categories,
     urlHint: urlHint,
     wowFactor: wowFactor,
+    url: url ?? this.url, // <-- NEW
     affiliateUrl: affiliateUrl ?? this.affiliateUrl,
     asin: asin,
     imageUrl: imageUrl ?? this.imageUrl,
@@ -128,6 +143,12 @@ String amazonSearchUrlFromHint(String urlHint) {
 /// Convenience: build a canonical Amazon product URL from an ASIN.
 String amazonProductUrlFromAsin(String asin) =>
     'https://www.amazon.com/dp/$asin';
+
+/// Helper to detect amazon hosts (incl. subdomains).
+bool _isAmazonHost(Uri u) {
+  final h = u.host.toLowerCase();
+  return h == 'amazon.com' || h.endsWith('.amazon.com');
+}
 
 class GiftIdeasService {
   final String functionUrl;
@@ -417,15 +438,36 @@ class GiftIdeasService {
     String tag,
   ) {
     if (!attach || res.ideas.isEmpty) return res;
+
     final tagged = res.ideas.map((g) {
-      // Priority: explicit affiliate/product URL > ASIN > search
-      final baseUrl = (g.affiliateUrl != null && g.affiliateUrl!.isNotEmpty)
-          ? g.affiliateUrl!
-          : (g.asin != null && g.asin!.isNotEmpty)
-          ? amazonProductUrlFromAsin(g.asin!)
-          : amazonSearchUrlFromHint(g.urlHint.isNotEmpty ? g.urlHint : g.title);
-      return g.copyWith(affiliateUrl: withAmazonTag(baseUrl, tag: tag));
+      // 1) If backend already supplied affiliateUrl, keep it.
+      if (g.affiliateUrl != null && g.affiliateUrl!.isNotEmpty) return g;
+
+      // 2) If there's a non-Amazon url, KEEP IT (don't convert to Amazon).
+      if (g.url != null && g.url!.isNotEmpty) {
+        final u = Uri.tryParse(g.url!);
+        if (u != null && !_isAmazonHost(u)) {
+          return g; // leave non-Amazon direct link as-is
+        }
+        // If it's an Amazon URL, tag it.
+        if (u != null && _isAmazonHost(u)) {
+          return g.copyWith(affiliateUrl: withAmazonTag(g.url!, tag: tag));
+        }
+      }
+
+      // 3) If we have an ASIN, create canonical /dp/ with tag.
+      if (g.asin != null && g.asin!.isNotEmpty) {
+        final dp = amazonProductUrlFromAsin(g.asin!);
+        return g.copyWith(affiliateUrl: withAmazonTag(dp, tag: tag));
+      }
+
+      // 4) Last resort: Amazon search with tag.
+      final searchBase = amazonSearchUrlFromHint(
+        g.urlHint.isNotEmpty ? g.urlHint : g.title,
+      );
+      return g.copyWith(affiliateUrl: withAmazonTag(searchBase, tag: tag));
     }).toList();
+
     return (rawJson: res.rawJson, ideas: tagged);
   }
 }

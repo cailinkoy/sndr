@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/event_info.dart';
 import '../pages/gift_ideas_page.dart';
+import '../widgets/relation_picker_section.dart';
+import '../gift_ideas/gift_ideas_sheet.dart';
 
 typedef PickDays = Future<int?> Function(BuildContext context);
 typedef SelectReminder =
@@ -35,6 +37,104 @@ class ContactsTab extends StatelessWidget {
   String capitalize(String text) =>
       text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
 
+  Future<void> _editRelationshipViaPicker({
+    required BuildContext context,
+    required String contactId,
+    required String currentRelationship,
+    required SetRelationship onSetRelationship,
+  }) async {
+    // We'll keep the currently selected set opaque (no RelTag here),
+    // and a custom label string if the user types one.
+    Set<dynamic> selected = <dynamic>{};
+    String? customLabel;
+
+    // If you already had a stored free-text relationship, seed it as custom.
+    if (currentRelationship.trim().isNotEmpty) {
+      customLabel = currentRelationship.trim();
+    }
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Set relationship',
+                style: Theme.of(sheetCtx).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+
+              // Use the wrapper widget; no direct RelTag/RelationPicker usage here.
+              EditContactRelationSection(
+                // We won't pass initialTags from here (keeps types opaque).
+                initialCustomLabel: customLabel,
+                onTagsChanged: (tags) {
+                  // tags is a Set<RelTag> inside that file; we keep it dynamic here.
+                  selected = {...tags};
+                },
+                onCustomLabelChanged: (label) {
+                  customLabel = (label == null || label.trim().isEmpty)
+                      ? null
+                      : label.trim();
+                },
+              ),
+
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetCtx),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.check),
+                    label: const Text('Save'),
+                    onPressed: () {
+                      // Collapse to a single string for your existing map:
+                      // 1) Prefer custom label if provided
+                      // 2) Else, first selected tag's name via toString() -> "RelTag.mother" -> "Mother"
+                      // 3) Else, empty string
+                      String collapsed = '';
+                      if (customLabel != null && customLabel!.isNotEmpty) {
+                        collapsed = customLabel!;
+                      } else if (selected.isNotEmpty) {
+                        final first = selected.first
+                            .toString(); // e.g. "RelTag.mother"
+                        final raw = first.contains('.')
+                            ? first.split('.').last
+                            : first;
+                        collapsed = raw.isEmpty
+                            ? ''
+                            : raw[0].toUpperCase() + raw.substring(1);
+                      }
+                      Navigator.pop(sheetCtx, collapsed);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      await onSetRelationship(contactId, result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Group by contact
@@ -62,132 +162,146 @@ class ContactsTab extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
-            child: InkWell(
-              onTap: () => onSetRelationship(c.id, relationship),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        c.photo != null && c.photo!.isNotEmpty
-                            ? CircleAvatar(
-                                radius: 22,
-                                backgroundImage: MemoryImage(c.photo!),
-                              )
-                            : CircleAvatar(
-                                radius: 22,
-                                child: Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      c.photo != null && c.photo!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 24,
+                              backgroundImage: MemoryImage(c.photo!),
+                            )
+                          : CircleAvatar(
+                              radius: 24,
+                              child: Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                c.displayName,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                relationship.isNotEmpty
-                                    ? relationship
-                                    : 'Set relation',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded),
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-                    const Divider(height: 1),
-
-                    // Events
-                    ...events.map((e) {
-                      final eventDate = DateTime(
-                        DateTime.now().year,
-                        e.event.month,
-                        e.event.day,
-                      );
-                      final formatted = DateFormat('MMMM d').format(eventDate);
-                      final label = capitalize(e.event.label.name);
-                      final firstName = e.contact.displayName.split(' ').first;
-
-                      final eventKey =
-                          'reminder_${e.contact.id}_${e.event.label.name}_${e.event.month}_${e.event.day}';
-                      final isReminderSet = reminderDaysMap.containsKey(
-                        eventKey,
-                      );
-
-                      final message =
-                          'Hey $firstName, just wanted to wish you a happy ${label.toLowerCase()}! Hope you and yours are doing well. Have a great one!';
-
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(2, 10, 2, 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                            ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                '• $label  —  $formatted',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            Text(
+                              c.displayName,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(width: 8),
-                            _ActionPillRow(
-                              isReminderSet: isReminderSet,
-                              onRemind: () async {
-                                final selected =
-                                    await showModalBottomSheet<int>(
-                                      context: context,
-                                      builder: (sheetCtx) => _ReminderSheet(
-                                        isReminderSet: isReminderSet,
-                                      ),
-                                    );
-                                if (!context.mounted) return;
-                                await onSelectReminder(context, e, selected);
-                              },
-                              onShare: () async {
-                                await SharePlus.instance.share(
-                                  ShareParams(text: message),
-                                );
-                              },
-                              onGift: () async {
-                                if (!context.mounted) return;
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => GiftIdeasPage(
-                                      prefillPerson: e.contact.displayName,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
+                            const SizedBox(height: 2),
                           ],
                         ),
-                      );
-                    }),
-                  ],
-                ),
+                      ),
+                      // Trailing compact icon row: chevron + relation-edit
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            relationship.isNotEmpty
+                                ? relationship
+                                : 'Set relation',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Icon(Icons.chevron_right_rounded),
+                          IconButton(
+                            tooltip: 'Set relation',
+                            icon: Icon(
+                              relationship.isNotEmpty
+                                  ? Icons.favorite
+                                  : Icons.favorite_outline,
+                            ),
+                            onPressed: () => _editRelationshipViaPicker(
+                              context: context,
+                              contactId: c.id,
+                              currentRelationship: relationship,
+                              onSetRelationship: onSetRelationship,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Events (block line BEFORE the action buttons)
+                  ...events.map((e) {
+                    final eventDate = DateTime(
+                      DateTime.now().year,
+                      e.event.month,
+                      e.event.day,
+                    );
+                    final formatted = DateFormat.MMMd(
+                      Localizations.localeOf(context).toString(),
+                    ).format(eventDate);
+
+                    final label = capitalize(e.event.label.name);
+                    final firstName = e.contact.displayName.split(' ').first;
+
+                    final eventKey =
+                        'reminder_${e.contact.id}_${e.event.label.name}_${e.event.month}_${e.event.day}';
+                    final isReminderSet = reminderDaysMap.containsKey(eventKey);
+
+                    final message =
+                        'Hey $firstName, just wanted to wish you a happy ${label.toLowerCase()}! Hope you and yours are doing well. Have a great one!';
+
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 2, 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '$label  •  $formatted',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _ActionIconRow(
+                            isReminderSet: isReminderSet,
+                            onRemind: () async {
+                              final selected = await showModalBottomSheet<int>(
+                                context: context,
+                                builder: (sheetCtx) => _ReminderSheet(
+                                  isReminderSet: isReminderSet,
+                                ),
+                              );
+                              if (!context.mounted) return;
+                              await onSelectReminder(context, e, selected);
+                            },
+                            onShare: () async {
+                              await SharePlus.instance.share(
+                                ShareParams(text: message),
+                              );
+                            },
+                            onGift: () {
+                              showGiftIdeasSheet(
+                                context: context,
+                                recipientName: c.displayName,
+                                occasion: label, // e.g., "Birthday"
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
           );
@@ -197,9 +311,9 @@ class ContactsTab extends StatelessWidget {
   }
 }
 
-/// Row of compact, modern action "pills" (Remind • Message • Gift)
-class _ActionPillRow extends StatelessWidget {
-  const _ActionPillRow({
+/// Row of compact action icons (Remind • Message • Gift)
+class _ActionIconRow extends StatelessWidget {
+  const _ActionIconRow({
     required this.isReminderSet,
     required this.onRemind,
     required this.onShare,
@@ -214,80 +328,30 @@ class _ActionPillRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: 6,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _PillButton(
-          icon: isReminderSet
-              ? Icons.notifications_active
-              : Icons.notifications_none,
-          label: isReminderSet ? 'Set' : 'Remind',
-          background: isReminderSet
-              ? cs.secondaryContainer
-              : cs.surfaceContainerHigh,
-          foreground: isReminderSet ? cs.onSecondaryContainer : cs.onSurface,
+        IconButton(
+          tooltip: isReminderSet ? 'Reminder set' : 'Set reminder',
+          icon: Icon(
+            isReminderSet
+                ? Icons.notifications_active
+                : Icons.notifications_none,
+            color: cs.onSurface,
+          ),
           onPressed: onRemind,
         ),
-        _PillButton(
-          icon: Icons.send_rounded,
-          label: 'Message',
-          background: cs.surfaceContainerHigh,
-          foreground: cs.onSurface,
+        IconButton(
+          tooltip: 'Send message',
+          icon: Icon(Icons.send_rounded, color: cs.onSurface),
           onPressed: onShare,
         ),
-        _PillButton(
-          icon: Icons.card_giftcard_rounded,
-          label: 'Gift',
-          background: cs.primaryContainer,
-          foreground: cs.onPrimaryContainer,
+        IconButton(
+          tooltip: 'Gift ideas',
+          icon: Icon(Icons.card_giftcard_rounded, color: cs.primary),
           onPressed: onGift,
         ),
       ],
-    );
-  }
-}
-
-class _PillButton extends StatelessWidget {
-  const _PillButton({
-    required this.icon,
-    required this.label,
-    required this.background,
-    required this.foreground,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color background;
-  final Color foreground;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(999),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: foreground),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
