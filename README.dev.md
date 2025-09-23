@@ -63,6 +63,10 @@ curl -i -s -X POST "https://us-central1-skilful-reducer-385816.cloudfunctions.ne
   -H "Content-Type: application/json" \
   -d "{\"occasion\":\"Birthday\",\"budget\":\"$25-$100\",\"recipient\":{\"name\":\"Abby Smith\"},\"locale\":\"en-US\"}"
 
+  git git commit -m "Your message here"
+git push origin main
+
+
 
 Expected: X-GiftIdeas-Handler header + non-empty ideas list.
 
