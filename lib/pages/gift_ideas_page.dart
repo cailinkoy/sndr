@@ -220,14 +220,13 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
     if (raw.isEmpty) return;
     if (!raw.contains('://')) raw = 'https://$raw';
     final uri = Uri.parse(raw);
-    if (!await canLaunchUrl(uri)) {
-      if (!mounted) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Could not open link.')));
-      return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   // ===== Manual ideas editor (unchanged behavior) =====
@@ -394,19 +393,15 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
       return;
     }
 
-    // ensure scheme
     if (!raw.contains('://')) raw = 'https://$raw';
-
     final uri = Uri.parse(raw);
-    final ok = await canLaunchUrl(uri);
-    if (!ok) {
-      if (!mounted) return;
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Could not open link.')));
-      return;
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
