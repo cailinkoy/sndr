@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/event_info.dart';
-import '../pages/gift_ideas_page.dart';
 import '../widgets/relation_picker_section.dart';
 import '../gift_ideas/gift_ideas_sheet.dart';
+import 'dart:typed_data';
 
 typedef PickDays = Future<int?> Function(BuildContext context);
 typedef SelectReminder =
@@ -163,144 +163,169 @@ class ContactsTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: Column(
+              // slightly tighter spacing
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      c.photo != null && c.photo!.isNotEmpty
-                          ? CircleAvatar(
-                              radius: 24,
-                              backgroundImage: MemoryImage(c.photo!),
-                            )
-                          : CircleAvatar(
-                              radius: 24,
-                              child: Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
+                  // LEFT: larger rounded-rectangle avatar
+                  _RoundedRectAvatar(
+                    name: c.displayName,
+                    photoBytes: c.photo, // Uint8List? compatible
+                    size: 64, // bump to 72 if you want bigger
+                    radius: 18, // match your mock
+                  ),
+                  const SizedBox(width: 12),
+
+                  // RIGHT: name header + stacked events as "sub-bullets"
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header row
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              c.displayName,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                              overflow: TextOverflow.ellipsis,
+                            Expanded(
+                              child: Text(
+                                c.displayName,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  relationship.isNotEmpty
+                                      ? relationship
+                                      : 'Set relation',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                ),
+
+                                // Compact heart—won't raise the row height
+                                IconButton(
+                                  icon: Icon(
+                                    relationship.isNotEmpty
+                                        ? Icons.favorite
+                                        : Icons.favorite_outline,
+                                  ),
+                                  onPressed: () => _editRelationshipViaPicker(
+                                    context: context,
+                                    contactId: c.id,
+                                    currentRelationship: relationship,
+                                    onSetRelationship: onSetRelationship,
+                                  ),
+                                  iconSize: 20,
+                                  style: IconButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(
+                                      24,
+                                      24,
+                                    ), // keep it small
+                                    tapTargetSize: MaterialTapTargetSize
+                                        .shrinkWrap, // no 48px min
+                                    visualDensity: const VisualDensity(
+                                      horizontal: -4,
+                                      vertical: -4,
+                                    ), // tighter
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                      ),
-                      // Trailing compact icon row: chevron + relation-edit
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            relationship.isNotEmpty
-                                ? relationship
-                                : 'Set relation',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+
+                        // Events stacked (label • date) with actions on the right
+                        ...events.map((e) {
+                          final eventDate = DateTime(
+                            DateTime.now().year,
+                            e.event.month,
+                            e.event.day,
+                          );
+                          final formatted = DateFormat.MMMd(
+                            Localizations.localeOf(context).toString(),
+                          ).format(eventDate);
+
+                          final label = capitalize(e.event.label.name);
+                          final firstName = e.contact.displayName
+                              .split(' ')
+                              .first;
+
+                          final eventKey =
+                              'reminder_${e.contact.id}_${e.event.label.name}_${e.event.month}_${e.event.day}';
+                          final isReminderSet = reminderDaysMap.containsKey(
+                            eventKey,
+                          );
+
+                          final message =
+                              'Hey $firstName, just wanted to wish you a happy ${label.toLowerCase()}! Hope you and yours are doing well. Have a great one!';
+
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '$label  •  $formatted',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const Icon(Icons.chevron_right_rounded),
-                          IconButton(
-                            tooltip: 'Set relation',
-                            icon: Icon(
-                              relationship.isNotEmpty
-                                  ? Icons.favorite
-                                  : Icons.favorite_outline,
-                            ),
-                            onPressed: () => _editRelationshipViaPicker(
-                              context: context,
-                              contactId: c.id,
-                              currentRelationship: relationship,
-                              onSetRelationship: onSetRelationship,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Events (block line BEFORE the action buttons)
-                  ...events.map((e) {
-                    final eventDate = DateTime(
-                      DateTime.now().year,
-                      e.event.month,
-                      e.event.day,
-                    );
-                    final formatted = DateFormat.MMMd(
-                      Localizations.localeOf(context).toString(),
-                    ).format(eventDate);
-
-                    final label = capitalize(e.event.label.name);
-                    final firstName = e.contact.displayName.split(' ').first;
-
-                    final eventKey =
-                        'reminder_${e.contact.id}_${e.event.label.name}_${e.event.month}_${e.event.day}';
-                    final isReminderSet = reminderDaysMap.containsKey(eventKey);
-
-                    final message =
-                        'Hey $firstName, just wanted to wish you a happy ${label.toLowerCase()}! Hope you and yours are doing well. Have a great one!';
-
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 2, 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$label  •  $formatted',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _ActionIconRow(
-                            isReminderSet: isReminderSet,
-                            onRemind: () async {
-                              final selected = await showModalBottomSheet<int>(
-                                context: context,
-                                builder: (sheetCtx) => _ReminderSheet(
+                                const SizedBox(width: 8),
+                                _ActionIconRow(
                                   isReminderSet: isReminderSet,
+                                  onRemind: () async {
+                                    final selected =
+                                        await showModalBottomSheet<int>(
+                                          context: context,
+                                          builder: (sheetCtx) => _ReminderSheet(
+                                            isReminderSet: isReminderSet,
+                                          ),
+                                        );
+                                    if (!context.mounted) return;
+                                    await onSelectReminder(
+                                      context,
+                                      e,
+                                      selected,
+                                    );
+                                  },
+                                  onShare: () async {
+                                    await SharePlus.instance.share(
+                                      ShareParams(text: message),
+                                    );
+                                  },
+                                  onGift: () {
+                                    showGiftIdeasSheet(
+                                      context: context,
+                                      recipientName: c.displayName,
+                                      occasion: label, // e.g., "Birthday"
+                                      occasionDate: formatted,
+                                    );
+                                  },
                                 ),
-                              );
-                              if (!context.mounted) return;
-                              await onSelectReminder(context, e, selected);
-                            },
-                            onShare: () async {
-                              await SharePlus.instance.share(
-                                ShareParams(text: message),
-                              );
-                            },
-                            onGift: () {
-                              showGiftIdeasSheet(
-                                context: context,
-                                recipientName: c.displayName,
-                                occasion: label, // e.g., "Birthday"
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -328,28 +353,42 @@ class _ActionIconRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    IconButton mini(
+      IconData icon,
+      String tip,
+      VoidCallback onTap, {
+      Color? color,
+    }) {
+      return IconButton(
+        tooltip: tip,
+        onPressed: onTap,
+        icon: Icon(icon, size: 18, color: color ?? cs.onSurface),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: const Size(36, 36),
+          padding: EdgeInsets.zero,
+          visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
+        ),
+      );
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: isReminderSet ? 'Reminder set' : 'Set reminder',
-          icon: Icon(
-            isReminderSet
-                ? Icons.notifications_active
-                : Icons.notifications_none,
-            color: cs.onSurface,
-          ),
-          onPressed: onRemind,
+        mini(
+          isReminderSet ? Icons.notifications_active : Icons.notifications_none,
+          isReminderSet ? 'Reminder set' : 'Set reminder',
+          onRemind,
         ),
-        IconButton(
-          tooltip: 'Send message',
-          icon: Icon(Icons.send_rounded, color: cs.onSurface),
-          onPressed: onShare,
-        ),
-        IconButton(
-          tooltip: 'Gift ideas',
-          icon: Icon(Icons.card_giftcard_rounded, color: cs.primary),
-          onPressed: onGift,
+        mini(Icons.send_rounded, 'Send message', onShare),
+        mini(
+          Icons.card_giftcard_rounded,
+          'Gift ideas',
+          onGift,
+          color: cs.primary,
         ),
       ],
     );
@@ -386,6 +425,51 @@ class _ReminderSheet extends StatelessWidget {
               onTap: () => Navigator.pop(context, 0),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Reusable rounded-rectangle avatar used by the card
+class _RoundedRectAvatar extends StatelessWidget {
+  const _RoundedRectAvatar({
+    required this.name,
+    required this.photoBytes, // compatible with Uint8List?
+    this.size = 64,
+    this.radius = 16,
+    super.key,
+  });
+
+  final String name;
+  final Uint8List? photoBytes;
+  final double size;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+
+    if (photoBytes == null || photoBytes!.isEmpty) return fallback;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Image.memory(
+        photoBytes!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
       ),
     );
   }

@@ -243,6 +243,7 @@ class EventsTab extends StatelessWidget {
                     context: context,
                     recipientName: c.displayName,
                     occasion: eventLabel, // e.g., "Birthday"
+                    occasionDate: formattedDate,
                   );
                 },
               ),
