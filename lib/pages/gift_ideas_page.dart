@@ -492,10 +492,42 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    o.title +
-                                        (o.dateIso != null
-                                            ? ' • ${o.dateIso}'
-                                            : ''),
+                                    () {
+                                      // 1) Use explicit dateIso if present
+                                      final explicit = o.dateIso?.trim();
+                                      if (explicit != null &&
+                                          explicit.isNotEmpty) {
+                                        return '${o.title} • $explicit';
+                                      }
+
+                                      // 2) Fallback: find a date anywhere in the id (YYYY-MM-DD or YYYY/MM/DD)
+                                      final id = (o.id).trim();
+                                      final m = RegExp(
+                                        r'(\d{4})[-/](\d{2})[-/](\d{2})',
+                                      ).firstMatch(id);
+
+                                      String dateStr = '';
+                                      if (m != null) {
+                                        // Normalize to YYYY-MM-DD
+                                        dateStr =
+                                            '${m.group(1)}-${m.group(2)}-${m.group(3)}';
+                                      }
+
+                                      // Debug breadcrumb (runs only in debug mode)
+                                      assert(() {
+                                        // ignore: avoid_print
+                                        debugPrint(
+                                          'Occasion debug -> id="$id", title="${o.title}", '
+                                          'dateIso="${o.dateIso}", dateStr="$dateStr"',
+                                        );
+                                        return true;
+                                      }());
+
+                                      return o.title +
+                                          (dateStr.isNotEmpty
+                                              ? ' • $dateStr'
+                                              : '');
+                                    }(),
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
@@ -535,7 +567,7 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
                                               decimal: true,
                                             ),
                                         decoration: const InputDecoration(
-                                          labelText: 'Budget',
+                                          labelText: '\$',
                                           prefixText: '\$',
                                           isDense: true,
                                           border: OutlineInputBorder(),
@@ -597,43 +629,47 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
 
                             const SizedBox(height: 8),
 
-                            // Get AI ideas
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: FilledButton.icon(
-                                onPressed: _aiLoading
-                                    ? null
-                                    : () => _getAiIdeas(
-                                        forName: _scopedName!,
-                                        budgetDollars:
-                                            budgetCtrl.text.trim().isNotEmpty
-                                            ? budgetCtrl.text.trim()
-                                            : null,
-                                        occasionTitle: o.title,
-                                      ),
-                                icon: const Icon(Icons.auto_awesome_rounded),
-                                label: const Text('Get AI ideas'),
-                              ),
-                            ),
-
-                            const SizedBox(height: 12),
-
-                            // Purchased checkbox + notes
+                            // Actions row: button left, purchased toggle right (same line)
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Checkbox(
-                                  value: st.purchased,
-                                  onChanged: (v) => _updateOccasionState(
-                                    o.id,
-                                    st.copyWith(purchased: v ?? false),
-                                  ),
+                                // Left: Get AI ideas button
+                                FilledButton.icon(
+                                  onPressed: _aiLoading
+                                      ? null
+                                      : () => _getAiIdeas(
+                                          forName: _scopedName!,
+                                          budgetDollars:
+                                              budgetCtrl.text.trim().isNotEmpty
+                                              ? budgetCtrl.text.trim()
+                                              : null,
+                                          occasionTitle: o.title,
+                                        ),
+                                  icon: const Icon(Icons.auto_awesome_rounded),
+                                  label: const Text('Get AI ideas'),
                                 ),
-                                const SizedBox(width: 6),
-                                const Text('Mark as purchased'),
+
+                                // Right: Purchased checkbox + label
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: st.purchased,
+                                      onChanged: (v) => _updateOccasionState(
+                                        o.id,
+                                        st.copyWith(purchased: v ?? false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Text('Mark as purchased'),
+                                  ],
+                                ),
                               ],
                             ),
+
+                            // Full-width notes only when purchased (tight spacing)
                             if (st.purchased) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               TextField(
                                 controller: notesCtrl,
                                 onChanged: (v) => _updateOccasionState(
@@ -645,6 +681,11 @@ class _GiftIdeasPageState extends State<GiftIdeasPage> {
                                   labelText:
                                       'Notes about gift purchased (what you bought, price, etc)',
                                   border: OutlineInputBorder(),
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 14,
+                                  ),
                                 ),
                               ),
                             ],

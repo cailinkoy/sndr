@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import 'main.dart' show flutterLocalNotificationsPlugin;
 import 'models/event_info.dart';
 import 'tabs/events_tab.dart';
@@ -13,6 +13,7 @@ import 'pages/settings_page.dart';
 import 'pages/about_page.dart';
 import 'package:sndr_app_new/widgets/sndr_logo.dart';
 import 'widgets/sndr_drawer_header_logo.dart';
+import 'dart:typed_data';
 
 /// --- Tab colors (apply in both light & dark because header is black) ---
 const kTabBright = Color(0xFFFFB74D);
@@ -25,19 +26,42 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<EventInfo> allEvents = [];
   Map<DateTime, List<EventInfo>> eventsByDay = {};
   Map<String, int> reminderDaysMap = {};
   Map<String, String> contactRelationships = {};
   bool isLoading = true;
 
+  // new: make sure we load once when permission is granted
+  bool _contactsLoaded = false;
+  bool _scheduledRecheck = false;
+
+  // cache for regular full-size contact photos
+  final Map<String, Uint8List> _avatarCache = {};
+
   @override
   void initState() {
     super.initState();
-    fetchContacts();
+    WidgetsBinding.instance.addObserver(this);
+
+    _maybeLoadContacts(); // guarded; does NOT prompt
     loadReminders();
     loadRelationships();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // If user comes back from Settings after granting permission
+    if (state == AppLifecycleState.resumed) {
+      _maybeLoadContacts();
+    }
   }
 
   // ---------- Relationships ----------
@@ -164,17 +188,29 @@ class _HomePageState extends State<HomePage> {
     return text[0].toUpperCase() + text.substring(1);
   }
 
-  Future<void> fetchContacts() async {
-    final permissionGranted = await FlutterContacts.requestPermission();
-    if (!mounted) return;
-    if (!permissionGranted) {
-      setState(() => isLoading = false);
-      return;
+  Future<void> _maybeLoadContacts() async {
+    if (_contactsLoaded) return;
+
+    final status = await Permission.contacts.status;
+    if (status != PermissionStatus.granted) {
+      // Ensure UI shows (no infinite spinner) before permission is granted
+      if (mounted && isLoading) {
+        setState(() => isLoading = false);
+      }
+      return; // overlay will handle prompting
     }
 
+    // We have permission now; fetch
+    if (mounted) setState(() => isLoading = true);
+    await fetchContacts();
+    _contactsLoaded = true;
+  }
+
+  Future<void> fetchContacts() async {
+    // Assumes permission already granted; DO NOT prompt here.
     final contacts = await FlutterContacts.getContacts(
       withProperties: true,
-      withPhoto: true,
+      withPhoto: true, // keep full-size photos
     );
     if (!mounted) return;
 
@@ -182,6 +218,12 @@ class _HomePageState extends State<HomePage> {
     final Map<DateTime, List<EventInfo>> eventMap = {};
 
     for (final contact in contacts) {
+      // --- cache the regular full-size photo once (if present) ---
+      final photo = contact.photo;
+      if (photo != null && photo.isNotEmpty) {
+        _avatarCache[contact.id] = photo;
+      }
+
       for (final event in contact.events) {
         final daysLeft = daysUntilMonthDay(event.month, event.day);
         final eventDate = DateTime(DateTime.now().year, event.month, event.day);
@@ -194,7 +236,6 @@ class _HomePageState extends State<HomePage> {
         eventMap.putIfAbsent(eventDate, () => []).add(info);
       }
     }
-
     eventList.sort((a, b) => a.daysLeft.compareTo(b.daysLeft));
 
     if (!mounted) return;
@@ -282,6 +323,16 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // After the overlay hides (permission granted), our widget will rebuild.
+    // Queue a one-shot post-frame recheck to load contacts if needed.
+    if (!_contactsLoaded && !_scheduledRecheck) {
+      _scheduledRecheck = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduledRecheck = false;
+        _maybeLoadContacts();
+      });
+    }
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -293,13 +344,6 @@ class _HomePageState extends State<HomePage> {
             offset: const Offset(0, 4), // nudge logo down a touch
             child: const SndrLogoNew(),
           ),
-          actions: [
-            IconButton(
-              tooltip: 'Export logo PNGs',
-              icon: const Icon(Icons.download_rounded),
-              onPressed: () => Navigator.pushNamed(context, '/logo-export'),
-            ),
-          ],
           bottom: TabBar(
             isScrollable: true,
             tabs: const [
@@ -337,6 +381,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     onSetRelationship: (contactId, current) =>
                         setRelationship(contactId, current),
+                    avatarCache: _avatarCache,
                   ),
 
                   // Calendar tab
@@ -366,10 +411,17 @@ class _HomePageState extends State<HomePage> {
                                 final eventLabel = capitalize(
                                   item.event.label.name,
                                 );
+
+                                // Use cached regular photo if available
+                                final cached = _avatarCache[item.contact.id];
+
                                 return ListTile(
-                                  leading:
-                                      (item.contact.photo != null &&
-                                          item.contact.photo!.isNotEmpty)
+                                  leading: (cached != null && cached.isNotEmpty)
+                                      ? CircleAvatar(
+                                          backgroundImage: MemoryImage(cached),
+                                        )
+                                      : (item.contact.photo != null &&
+                                            item.contact.photo!.isNotEmpty)
                                       ? CircleAvatar(
                                           backgroundImage: MemoryImage(
                                             item.contact.photo!,
@@ -408,6 +460,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     onSetRelationship: (contactId, current) =>
                         setRelationship(contactId, current),
+                    avatarCache: _avatarCache,
                   ),
                 ],
               ),

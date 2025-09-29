@@ -6,6 +6,9 @@ import '../widgets/relation_picker_section.dart';
 import '../gift_ideas/gift_ideas_sheet.dart';
 import 'dart:typed_data';
 
+// ✅ Memoize per-contact ImageProviders to prevent flicker on rebuilds
+final Map<String, ImageProvider> _avatarProviderCache = {};
+
 typedef PickDays = Future<int?> Function(BuildContext context);
 typedef SelectReminder =
     Future<void> Function(
@@ -25,6 +28,7 @@ class ContactsTab extends StatelessWidget {
     required this.onPickReminderDays,
     required this.onSelectReminder,
     required this.onSetRelationship,
+    this.avatarCache,
   });
 
   final List<EventInfo> allEvents;
@@ -33,6 +37,7 @@ class ContactsTab extends StatelessWidget {
   final PickDays onPickReminderDays;
   final SelectReminder onSelectReminder;
   final SetRelationship onSetRelationship;
+  final Map<String, Uint8List>? avatarCache;
 
   String capitalize(String text) =>
       text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
@@ -156,7 +161,15 @@ class ContactsTab extends StatelessWidget {
 
           final relationship = contactRelationships[c.id] ?? '';
 
+          // ✅ Memoize provider per contact id (uses cached bytes if available)
+          final Uint8List? photoBytes = avatarCache?[c.id] ?? c.photo;
+          final ImageProvider? provider =
+              (photoBytes == null || photoBytes.isEmpty)
+              ? null
+              : (_avatarProviderCache[c.id] ??= MemoryImage(photoBytes));
+
           return Card(
+            key: ValueKey(c.id), // ✅ stable key prevents remount on rebuild
             elevation: 1,
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(
@@ -171,7 +184,8 @@ class ContactsTab extends StatelessWidget {
                   // LEFT: larger rounded-rectangle avatar
                   _RoundedRectAvatar(
                     name: c.displayName,
-                    photoBytes: c.photo, // Uint8List? compatible
+                    photoBytes: photoBytes, // kept for compatibility
+                    provider: provider, // ✅ use memoized provider when present
                     size: 64, // bump to 72 if you want bigger
                     radius: 18, // match your mock
                   ),
@@ -240,7 +254,7 @@ class ContactsTab extends StatelessWidget {
                                     visualDensity: const VisualDensity(
                                       horizontal: -4,
                                       vertical: -4,
-                                    ), // tighter
+                                    ),
                                   ),
                                 ),
                               ],
@@ -435,6 +449,7 @@ class _RoundedRectAvatar extends StatelessWidget {
   const _RoundedRectAvatar({
     required this.name,
     required this.photoBytes, // compatible with Uint8List?
+    this.provider, // ✅ optional memoized provider
     this.size = 64,
     this.radius = 16,
     super.key,
@@ -442,6 +457,7 @@ class _RoundedRectAvatar extends StatelessWidget {
 
   final String name;
   final Uint8List? photoBytes;
+  final ImageProvider? provider; // ✅ new
   final double size;
   final double radius;
 
@@ -461,8 +477,22 @@ class _RoundedRectAvatar extends StatelessWidget {
       ),
     );
 
+    // ✅ Use memoized provider when available (no re-resolution)
+    if (provider != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image(
+          image: provider!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
     if (photoBytes == null || photoBytes!.isEmpty) return fallback;
 
+    // Fallback: render from bytes (kept for compatibility)
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Image.memory(

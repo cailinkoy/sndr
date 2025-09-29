@@ -3,6 +3,10 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/event_info.dart';
 import '../gift_ideas/gift_ideas_sheet.dart';
+import 'dart:typed_data';
+
+// ✅ Memoize per-contact ImageProviders so avatars don't re-resolve on rebuilds
+final Map<String, ImageProvider> _eventAvatarProviderCache = {};
 
 typedef PickDays = Future<int?> Function(BuildContext context);
 typedef SelectReminder =
@@ -142,6 +146,7 @@ class EventsTab extends StatelessWidget {
     required this.onPickReminderDays,
     required this.onSelectReminder,
     required this.onSetRelationship,
+    this.avatarCache,
   });
 
   final List<EventInfo> allEvents;
@@ -149,6 +154,7 @@ class EventsTab extends StatelessWidget {
   final PickDays onPickReminderDays;
   final SelectReminder onSelectReminder;
   final SetRelationship onSetRelationship;
+  final Map<String, Uint8List>? avatarCache;
 
   String capitalize(String text) =>
       text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
@@ -204,13 +210,23 @@ class EventsTab extends StatelessWidget {
           final subtitleLine =
               '${item.daysLeft} days from now  •  $formattedDate';
 
+          // ✅ Memoize provider per contact id (use avatarCache first)
+          final Uint8List? photoBytes = (avatarCache?[c.id] ?? c.photo);
+          final ImageProvider? provider =
+              (photoBytes == null || photoBytes.isEmpty)
+              ? null
+              : (_eventAvatarProviderCache[c.id] ??= MemoryImage(photoBytes));
+
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 0, 10), // hanging indent
             child: _EventCard(
-              avatar: c.photo != null && c.photo!.isNotEmpty
+              key: ValueKey(
+                'evt_${c.id}_${e.label.name}_${e.month}_${e.day}',
+              ), // ✅ stable key
+              avatar: (provider != null)
                   ? CircleAvatar(
                       radius: 22,
-                      backgroundImage: MemoryImage(c.photo!),
+                      backgroundImage: provider, // ✅ reuse memoized provider
                     )
                   : CircleAvatar(
                       radius: 22,
@@ -258,6 +274,7 @@ class EventsTab extends StatelessWidget {
 /// Generic card used for each Upcoming item (avatar + title/subtitle + action pills)
 class _EventCard extends StatelessWidget {
   const _EventCard({
+    super.key, // ✅ allow passing a Key for stable mounting
     required this.avatar,
     required this.title,
     required this.subtitle,

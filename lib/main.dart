@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
-import 'dev/logo_export_page.dart'; // for logo
+// import 'dev/logo_export_page.dart'; // ← removed (file was deleted)
 import 'home_page.dart';
 import 'theme_controller.dart';
+import 'widgets/permission_primer_dialog.dart'; // <— new
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
+
+// ✅ Navigator key to access a context inside the Navigator
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> _setupNotifications() async {
   // Init plugin
@@ -16,23 +20,6 @@ Future<void> _setupNotifications() async {
 
   // Timezones
   tz.initializeTimeZones();
-  // If you ever need to force a specific location:
-  // tz.setLocalLocation(tz.getLocation('America/Los_Angeles'));
-
-  // Android-specific permissions & channel
-  final android = flutterLocalNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >();
-
-  // Android 13+ runtime notification permission
-  await android?.requestNotificationsPermission();
-
-  // ---- Added safety: check before requesting exact alarms
-  final canExact = await android?.canScheduleExactNotifications() ?? false;
-  if (!canExact) {
-    await android?.requestExactAlarmsPermission();
-  }
 
   // Create (or no-op if exists) a high-importance channel for reminders
   const channel = AndroidNotificationChannel(
@@ -41,6 +28,10 @@ Future<void> _setupNotifications() async {
     description: 'Occasion reminders from [sndr]',
     importance: Importance.max,
   );
+  final android = flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
   await android?.createNotificationChannel(channel);
 }
 
@@ -81,8 +72,8 @@ class MyApp extends StatelessWidget {
             ),
             cardTheme: CardThemeData(
               surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(18)),
               ),
               elevation: 1,
             ),
@@ -103,16 +94,30 @@ class MyApp extends StatelessWidget {
             ),
             cardTheme: CardThemeData(
               surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(18)),
               ),
               elevation: 1,
             ),
           ),
 
           themeMode: mode, // live updates from Settings
-          routes: {'/logo-export': (_) => const LogoExportPage()},
+          // routes: {'/logo-export': (_) => const LogoExportPage()}, // ← removed
           home: const HomePage(),
+
+          // ✅ Provide a navigatorKey so we can get a Navigator-aware context
+          navigatorKey: appNavigatorKey,
+
+          // ❗ One-time primer popup (does not block UI; no overlays)
+          builder: (context, child) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final ctx = appNavigatorKey.currentContext; // has a Navigator
+              if (ctx != null) {
+                showPermissionPrimerIfNeeded(ctx);
+              }
+            });
+            return child ?? const SizedBox.shrink();
+          },
         );
       },
     );
