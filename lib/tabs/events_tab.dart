@@ -8,6 +8,36 @@ import 'dart:typed_data';
 // ✅ Memoize per-contact ImageProviders so avatars don't re-resolve on rebuilds
 final Map<String, ImageProvider> _eventAvatarProviderCache = {};
 
+// 🔹 NEW: Rounded-rectangle avatar (44×44) with fallback initial.
+//     Keeps same visual footprint as CircleAvatar(radius: 22).
+Widget _roundedRectAvatar({
+  required ImageProvider? provider,
+  required String displayName,
+}) {
+  const double size = 44;
+  final String initial = (displayName.isNotEmpty)
+      ? displayName.characters.first.toUpperCase()
+      : '?';
+
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(10),
+    child: (provider != null)
+        ? Image(image: provider, width: size, height: size, fit: BoxFit.cover)
+        : Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.06),
+            ),
+            child: Text(
+              initial,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+          ),
+  );
+}
+
 typedef PickDays = Future<int?> Function(BuildContext context);
 typedef SelectReminder =
     Future<void> Function(
@@ -223,20 +253,11 @@ class EventsTab extends StatelessWidget {
               key: ValueKey(
                 'evt_${c.id}_${e.label.name}_${e.month}_${e.day}',
               ), // ✅ stable key
-              avatar: (provider != null)
-                  ? CircleAvatar(
-                      radius: 22,
-                      backgroundImage: provider, // ✅ reuse memoized provider
-                    )
-                  : CircleAvatar(
-                      radius: 22,
-                      child: Text(
-                        c.displayName.isNotEmpty
-                            ? c.displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
+              // 🔹 CHANGED: use rounded-rect avatar
+              avatar: _roundedRectAvatar(
+                provider: provider,
+                displayName: c.displayName,
+              ),
               title: titleLine,
               subtitle: subtitleLine,
               onTapTitle: () => onSetRelationship(c.id, ''), // hook if desired

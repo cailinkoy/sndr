@@ -248,13 +248,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   int daysUntilMonthDay(int month, int day) {
     final now = DateTime.now();
-    final year = now.year;
-    final jan1 = DateTime(year, 1, 1);
-    final dec31 = DateTime(year, 12, 31);
-    final eventDate = DateTime(year, month, day);
-    final x = eventDate.difference(jan1).inDays + 1;
-    final y = now.difference(jan1).inDays + 1;
-    return (x > y) ? x - y : dec31.difference(now).inDays + x;
+    final today = DateTime(now.year, now.month, now.day); // strip time
+    var eventDate = DateTime(today.year, month, day);
+
+    // If event already happened this year, move it to next year
+    if (eventDate.isBefore(today)) {
+      eventDate = DateTime(today.year + 1, month, day);
+    }
+
+    return eventDate.difference(today).inDays;
   }
 
   List<EventInfo> getEventsForDay(DateTime day) {

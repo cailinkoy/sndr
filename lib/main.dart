@@ -5,6 +5,8 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'home_page.dart';
 import 'theme_controller.dart';
 import 'widgets/permission_primer_dialog.dart'; // <— new
+import 'core/feature_flags.dart';
+import 'core/entitlements.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -37,6 +39,8 @@ Future<void> _setupNotifications() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await FeatureFlags.init();
+  await Entitlements.init();
 
   // Notifications setup
   await _setupNotifications();

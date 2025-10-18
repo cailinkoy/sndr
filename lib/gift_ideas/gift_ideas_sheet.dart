@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../pages/gift_ideas_page.dart'; // GiftIdeasPage + OccasionRef
 import 'gift_ideas_service.dart'; // model + service + affiliate helpers
-import 'dart:convert'; // trying to get thumbnails for gift idea products
+import '../core/feature_flags.dart';
+import '../widgets/paywall_guard.dart';
 
 // deployed Cloud Function URL here
 const kFunctionUrl =
@@ -94,7 +95,8 @@ class _GiftIdeasSheetContentState extends State<_GiftIdeasSheetContent> {
       );
       if (!mounted) return;
       setState(() {
-        _ideas = result.ideas.take(2).toList(); // preview a few
+        // IMPORTANT: keep full list backend, show 2 for room, so we can show 1 free + gate the rest
+        _ideas = result.ideas.take(2).toList();
       });
     } catch (e) {
       if (!mounted) return;
@@ -121,6 +123,13 @@ class _GiftIdeasSheetContentState extends State<_GiftIdeasSheetContent> {
 
     final fullName = widget.recipientName.trim();
     final shortName = fullName.split(RegExp(r'\s+')).first; // first word
+
+    // Split the ideas for gating: first is free, remainder are gated.
+    final hasIdeas = _ideas.isNotEmpty;
+    final firstIdea = hasIdeas ? _ideas.first : null;
+    final remainingIdeas = hasIdeas && _ideas.length > 1
+        ? _ideas.sublist(1)
+        : const <GiftIdea>[];
 
     return SafeArea(
       child: Padding(
@@ -201,7 +210,7 @@ class _GiftIdeasSheetContentState extends State<_GiftIdeasSheetContent> {
               )
             else if (_error != null)
               _ErrorBanner(_error!)
-            else if (_ideas.isEmpty)
+            else if (!hasIdeas)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
@@ -209,34 +218,79 @@ class _GiftIdeasSheetContentState extends State<_GiftIdeasSheetContent> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               )
-            else
-              ..._ideas.map((it) => _IdeaTile(it)),
-            // Footer: jump to the full page
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                style: _tertiaryBtnStyle,
-                onPressed: () {
-                  Navigator.pop(context); // close sheet
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => GiftIdeasPage(
-                        contactId: contactKey,
-                        contactName: widget.recipientName,
-                        occasions: [
-                          OccasionRef(
-                            id: occasionId,
-                            title: widget.occasion,
-                            dateIso: widget.occasionDate,
-                          ),
-                        ],
+            else ...[
+              // ✅ Always show exactly ONE free idea
+              _IdeaTile(firstIdea!),
+              const SizedBox(height: 12),
+
+              // 🔒 Gate the REST of the ideas + the navigation to "More..."
+              if (remainingIdeas.isNotEmpty)
+                PaywallGuard(
+                  featureFlag: FeatureFlags.premiumGiftIdeas,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final idea in remainingIdeas) ...[
+                        _IdeaTile(idea),
+                        const SizedBox(height: 8),
+                      ],
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          style: _tertiaryBtnStyle,
+                          onPressed: () {
+                            Navigator.pop(context); // close sheet
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => GiftIdeasPage(
+                                  contactId: contactKey,
+                                  contactName: widget.recipientName,
+                                  occasions: [
+                                    OccasionRef(
+                                      id: occasionId,
+                                      title: widget.occasion,
+                                      dateIso: widget.occasionDate,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          child: Text('More gift ideas for $shortName >>>'),
+                        ),
                       ),
-                    ),
-                  );
-                },
-                child: Text('More gift ideas for $shortName >>>'),
-              ),
-            ),
+                    ],
+                  ),
+                ),
+
+              // If there are NOT more ideas, show the footer button free (optional)
+              if (remainingIdeas.isEmpty)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    style: _tertiaryBtnStyle,
+                    onPressed: () {
+                      Navigator.pop(context); // close sheet
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => GiftIdeasPage(
+                            contactId: contactKey,
+                            contactName: widget.recipientName,
+                            occasions: [
+                              OccasionRef(
+                                id: occasionId,
+                                title: widget.occasion,
+                                dateIso: widget.occasionDate,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text('More gift ideas for $shortName >>>'),
+                  ),
+                ),
+            ],
           ],
         ),
       ),

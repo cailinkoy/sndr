@@ -65,6 +65,8 @@ curl -i -s -X POST "https://us-central1-skilful-reducer-385816.cloudfunctions.ne
 
   git git commit -m "Your message here"
 git push origin main
+git add -A && git commit -m "your message here" && git push origin main
+
 
 
 
